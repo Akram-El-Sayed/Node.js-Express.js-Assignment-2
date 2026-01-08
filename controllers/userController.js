@@ -1,3 +1,7 @@
+const { SenMail } = require("../utils/mailer");
+const bcrypt = require('bcrypt');
+const userSchema = require("../validators/userSchema");
+
 let Users = []
 function findAll(request, response) {
   response.send({ message: "Users List", data: Users });
@@ -16,8 +20,20 @@ function findOne(request, response, next) {
   response.send({ message: "User Found", data: User });
 }
 
-function createUser(request, response, next) {
-  const { email, password } = request.body;
+async function createUser(request, response, next) {
+ try {
+  const { error } = userSchema.validate(request.body);
+    if (error) {
+      error.status = 400;
+      return next(error);
+    }
+
+    if (!request.file) {
+      const err = new Error("Profile image is required");
+      err.status = 400;
+      return next(err);
+    }
+   const {name, email, password, age } = request.body;
 
   let user = Users.find((item) => item.email == email);
 
@@ -25,16 +41,25 @@ function createUser(request, response, next) {
     const error = new Error("Email Already Exist!");
     return next(error);
   }
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-  user = { id: Users.length + 1, email, password };
+  const avatar = request.file.path
+  user = { id: Users.length + 1,name, email, password: hashedPassword , age , avatar };
   
   Users.push(user);
 
-  response.send({ message: "User Create", data: user });
+  await SenMail(email , 'Welcome Welcome XD', 'Greetings')
+
+  response.status(201).send({ message: "User Created", data: user });
+ } catch (error) {
+  error.status = 500;
+    next(error);
+ }
 }
 
-function updateUser(request, response,next) {
-const id = request.params.id;
+async function updateUser(request, response,next) {
+try {
+  const id = request.params.id;
   
   const User = Users.find((item) => item.id == id);
   
@@ -47,7 +72,13 @@ const id = request.params.id;
 
   User.email = email ?? User.email
   User.password = password ?? User.password
-   response.send({ message: "User Updated", data: User });
+  await SenMail(email , 'Updated', 'User_Update')
+  response.send({ message: "User Updated", data: User });
+  
+} catch (error) {
+  error.status = 400
+  next(error)
+}
 }
 function removeUser(request, response, next) {
   const id = request.params.id;
